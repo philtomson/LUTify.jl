@@ -5,12 +5,17 @@ it's difficult to implement in hardware without resorting to something like CORD
 
 Useage:
 
-   LUT(*function*, *stepped range*)
+    LUT(*function*, *stepped range*)
 
 Useage example:
 
-   using LUTify
+    using LUTify
 
-   sinlut = LUT(sin, 0.0:(pi/100):2.0\*pi)
+    sinlut = LUT(sin, 0.0:(pi/100):2.0\*pi)
+
+TODO: 
+* support functions with multiple inputs (macros will likely be required for this)
+* add tests
+* export lookup tables to HDL  
 
 
