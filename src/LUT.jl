@@ -9,18 +9,6 @@ mutable struct LUT{A,R,F}
    lut::A
 end
 
-function LUT(fn::Function, r::StepRangeLen)
-   lut = [fn(x) for x in r ]
-   LUT(fn, r, lut)
-end
-
-function (lut::LUT)(x)
-   if(x < lut.r[1] ||  x > lut.r[end])
-      error("out of range!")
-   end
-   lut.lut[round(Int, x/lut.r.step.hi) + 1]
-end
-
  ## The beginning of multi-var support:
  #this one would be for passing a function as opposed to a formula:
 function build_lut(fn::Function, vars)
@@ -38,6 +26,9 @@ function build_lut(fn::Function, vars)
    @eval $(Meta.parse(compstr))
 end
 
+#TODO: getidx needs to be generalized for multiple inputs
+getidx(val, init_val, step) = round(Int, (val-init_val/step))+1
+
 function build_lut(fn::Expr, vars)
     compstr = "[ $(fn)"
     args    = []
@@ -52,6 +43,18 @@ function build_lut(fn::Expr, vars)
     @show compstr
     @eval $(Meta.parse(compstr))
  end
+
+function LUT(fn::Function, r::StepRangeLen)
+   lut = [fn(x) for x in r ]
+   LUT(fn, r, lut)
+end
+
+function (lut::LUT)(x)
+   if(x < lut.r[1] ||  x > lut.r[end])
+      error("out of range!")
+   end
+   lut.lut[round(Int, x/lut.r.step.hi) + 1]
+end
 
 
 
