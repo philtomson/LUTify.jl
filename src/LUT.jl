@@ -78,10 +78,20 @@ fnlut   = build_lut(fn, [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0)])
 
 exprlut2 = LUT(:(x+y+z), [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0), (:z, 0.0:10.0)])
 
+function range_check_(lut::LUT, vals_dict)
+   for v_r in lut.r
+      var    = v_r[1]
+      vrange = v_r[2] 
+      val  = vals_dict[var]
+      if( !(vrange[1] <= val <= vrange[end]) )
+         error("$var value $val is not between $(vrange[1]) and $(vrange[end])")
+      end
+   end
+end
 
 #get_idx - for integer values & start of range at 0.0 only for now!
-#TODO: range check values in vals_dict against specified range
 function get_idx(lut::LUT, vals_dict)
+   range_check_(lut, vals_dict)
    rev_r = reverse(lut.r)
    m = 1
    idx = 1
@@ -93,14 +103,7 @@ function get_idx(lut::LUT, vals_dict)
          val = vals_dict[var]
          r = rl[1][2]
          rstart = r[1]
-         @show rstart
          idx += ((val-rstart)/step(r)) * m
-         @show var
-         @show val
-         @show m
-         @show length(r)
-         @show rl[1]
-         @show idx
          m   *= length(r)
          helper(rl[2:end])
       end
@@ -113,4 +116,6 @@ end
 @show exprlut2.lut[get_idx(exprlut2, Dict(:x=>4, :y=>3, :z=>1))]
 
 exprlut3 = LUT(:(x+y+z), [(:x, 2.0:0.1:8.0), (:y, 1.0:0.1:10.0), (:z, 0.0:10.0)])
+
+@show exprlut3.lut[get_idx(exprlut3, Dict(:x=>4.2, :y=>3.5, :z=>10.0))]
 
