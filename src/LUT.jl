@@ -49,6 +49,11 @@ function LUT(fn::Function, r::StepRangeLen)
    LUT(fn, r, lut)
 end
 
+function LUT(fn::Expr, rs::Array{Tuple{Symbol,StepRangeLen{Float64,Base.TwicePrecision{Float64},Base.TwicePrecision{Float64}}},1})
+   lut = build_lut(fn, rs)
+   LUT(fn, rs, lut)
+end
+
 function (lut::LUT)(x)
    if(x < lut.r[1] ||  x > lut.r[end])
       error("out of range!")
@@ -68,6 +73,8 @@ exprlut = build_lut(:(2*x*y^2), [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0)])
 
 fn(x,y)   = 2x*y^2
 fnlut   = build_lut(fn, [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0)])
+
+exprlut2 = LUT(:(2*x*y^2), [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0)])
 
 
 
