@@ -76,11 +76,11 @@ exprlut = build_lut(:(2*x*y^2), [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0)])
 fn(x,y)   = 2x*y^2
 fnlut   = build_lut(fn, [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0)])
 
-exprlut2 = LUT(:(x+y+z), [(:x, 0.0:10.0), (:y, 0.0:10.0), (:z, 0.0:10.0)])
+exprlut2 = LUT(:(x+y+z), [(:x, 0.0:0.1:10.0), (:y, 0.0:0.1:10.0), (:z, 0.0:10.0)])
 
 
 #get_idx - for integer values & start of range at 0.0 only for now!
-# TODO: fix this for non-1 values of step
+#TODO: range check values in vals_dict against specified range
 function get_idx(lut::LUT, vals_dict)
    rev_r = reverse(lut.r)
    m = 1
@@ -89,19 +89,28 @@ function get_idx(lut::LUT, vals_dict)
       if(length(rl) == 0)
          return
       else   
-         @show rl[1][1]
+         var = rl[1][1]
+         val = vals_dict[var]
+         r = rl[1][2]
+         rstart = r[1]
+         @show rstart
+         idx += ((val-rstart)/step(r)) * m
+         @show var
+         @show val
          @show m
-         @show length(rl[1][2])
+         @show length(r)
          @show rl[1]
-         idx += (vals_dict[rl[1][1]] ) * m 
          @show idx
-         m   *= length(rl[1][2])
+         m   *= length(r)
          helper(rl[2:end])
       end
    end
    helper(rev_r)
+   @show "return idx is: $idx"
    Int(idx)
 end
 
 @show exprlut2.lut[get_idx(exprlut2, Dict(:x=>4, :y=>3, :z=>1))]
+
+exprlut3 = LUT(:(x+y+z), [(:x, 2.0:0.1:8.0), (:y, 1.0:0.1:10.0), (:z, 0.0:10.0)])
 
