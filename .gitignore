@@ -1,0 +1,7 @@
+# Julia
+*.swp
+*.sum
+julia_cache/
+
+# Dependencies
+Manifest.toml
