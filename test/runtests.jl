@@ -159,6 +159,87 @@ for θ in 0.0:π/8:2π
     @test abs(diff) < 0.3  # generous tolerance for atan2
 end
 println("atan2 consistency with sin/cos: PASS")
+# ──────────────────────────────────────────────
+# Testing HDL Export
+# ──────────────────────────────────────────────
+@testset "HDL Export" begin
+    @testset "Verilog generation" begin
+        sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+        vlog = export_verilog(sinlut, 8, "sin")
+
+        @test occursin("module lut_sin_bits8(", vlog)
+        @test occursin("input  wire [7:0] addr", vlog)
+        @test occursin("output reg  [7:0]     data", vlog)
+        @test occursin("reg [7:0] lut [0:199];", vlog)
+        @test occursin("8'b01111111;", vlog)   # index 0 = 127 = 0x7f
+        @test occursin("8'b10000100;", vlog)  # index 1 = 132 = 0x84
+    end
+
+    @testset "VHDL generation" begin
+        sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+        vhd = export_vhdl(sinlut, 8, "sin")
+
+        @test occursin("entity lut_sin_8bit is", vhd)
+        @test occursin("addr : in  std_logic_vector(7 downto 0);", vhd)
+        @test occursin("data : out std_logic_vector(7 downto 0)", vhd)
+        @test occursin("constant lut : lut_array_t := (", vhd)
+        @test occursin("x\"7f\",", vhd)   # index 0 = 127 = 0x7f
+        @test occursin("x\"84\",", vhd)   # index 1 = 132 = 0x84
+    end
+
+    @testset "Memory files" begin
+        sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+
+        export_memfile(sinlut, "/tmp/test_lut.hex")
+        hex_content = read("/tmp/test_lut.hex", String)
+        @test startswith(hex_content, "% 8\n")
+        @test occursin("7f\n", hex_content)   # first value = 127
+        @test occursin("84\n", hex_content)   # second value = 132
+
+        export_memfile(sinlut, "/tmp/test_lut.mif"; format=:mif)
+        mif_content = read("/tmp/test_lut.mif", String)
+        @test occursin("DEPTH = 200;", mif_content)
+        @test occursin("WIDTH = 8;", mif_content)
+
+        export_memfile(sinlut, "/tmp/test_lut.coe"; format=:coe)
+        coe_content = read("/tmp/test_lut.coe", String)
+        @test occursin("memory_initialization_radix=10;", coe_content)
+        @test occursin("    127,", coe_content)   # first value
+
+        export_memfile(sinlut, "/tmp/test_lut.txt"; format=:txt)
+        txt_content = read("/tmp/test_lut.txt", String)
+        lines_txt = split(chomp(txt_content), "
+")
+        @test length(lines_txt) == 200
+        @test parse(Int, lines_txt[1]) == 127
+
+        rm("/tmp/test_lut.hex"; force=true)
+        rm("/tmp/test_lut.mif"; force=true)
+        rm("/tmp/test_lut.coe"; force=true)
+        rm("/tmp/test_lut.txt"; force=true)
+    end
+
+    @testset "Standard LUT quantization" begin
+        stdlut = LUT(sin, 0.0:(π/50):2π)
+        vlog = export_verilog(stdlut, 8, "sin_std")
+        @test occursin("module lut_sin_std_bits8(", vlog)
+        @test occursin("8'b10000000;", vlog)   # sin(0) = 0 → quantized to ~128
+    end
+
+    @testset "Different bit widths" begin
+        sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+        vlog_4bit = export_verilog(sinlut, 4, "sin")
+        @test occursin("reg [3:0] lut", vlog_4bit)
+        vlog_16bit = export_verilog(sinlut, 16, "sin")
+        @test occursin("reg [15:0] lut", vlog_16bit)
+    end
+
+    @testset "Invalid bits throws error" begin
+        sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+        @test_throws ErrorException export_verilog(sinlut, 0, "bad")
+        @test_throws ErrorException export_verilog(sinlut, 33, "bad")
+    end
+end
 
 # ──────────────────────────────────────────────────────
 # Summary

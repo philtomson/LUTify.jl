@@ -94,6 +94,38 @@ Verified identities:
 | `cordic_exp(z, n)` | Compute exp(z) = cosh(z) + sinh(z) via hyperbolic CORDIC |
 | `LUT_cordic(fn, range, bits, n)` | Build a quantized LUT using CORDIC reference values |
 
+
+### Export to HDL (Verilog/VHDL)
+
+Generate hardware description language modules directly from LUT objects:
+
+```julia
+using LUTify
+
+sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+
+# Generate Verilog module
+vlog = export_verilog(sinlut, 8, "sin")
+open("sin_lut.v", "w") do f; write(f, vlog); end
+
+# Generate VHDL entity
+vhd = export_vhdl(sinlut, 8, "sin")
+open("sin_lut.vhd", "w") do f; write(f, vhd); end
+
+# Write memory initialization files for FPGA tools
+export_memfile(sinlut, "sin_lut.hex")          # Intel/Altera HEX
+export_memfile(sinlut, "sin_lut.mif"; format=:mif)   # Altera MIF
+export_memfile(sinlut, "sin_lut.coe"; format=:coe)   # Xilinx COE
+export_memfile(sinlut, "sin_lut.txt"; format=:txt)   # Plain text
+```
+
+The generated Verilog module has:
+- `addr` input: address bus width = ⌈log₂(N)⌉ bits (N = LUT size)
+- `clk` input: clock for registered output
+- `data` output: quantized value (bits wide)
+
+Standard float LUTs are automatically quantized from their value range to [0, 2^bits−1].
+
 ## TODO
 
 - [x] CORDIC support (sin, cos, tan)
