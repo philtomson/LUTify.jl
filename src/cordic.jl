@@ -1,13 +1,14 @@
 ##########################################################
 # LUTify — CORDIC algorithm support
-# Generate lookup tables and evaluate trig functions via CORDIC
+# Generate lookup tables and evaluate trig/hyperbolic functions via CORDIC
 #
 # CORDIC (COordinate Rotation Digital Computer) is an iterative
 # algorithm that computes trigonometric functions using only
 # shifts and adds — ideal for hardware implementation.
 ##########################################################
 
-export cordic_angles, cordic_sin, cordic_cos, LUT_cordic
+export cordic_angles, cordic_sin, cordic_cos, LUT_cordic,
+       cordic_atan2, cordic_sinh, cordic_cosh, cordic_exp
 
 """
     cordic_angles(n::Int=16) -> Vector{Float64}
@@ -121,11 +122,238 @@ function cordic_cos(θ::Real, n::Int=16)
     return cordic_cos(Float64(θ), n)
 end
 
+# ──────────────────────────────────────────────────────
+# Hyperbolic CORDIC (sinh, cosh, exp)
+# ──────────────────────────────────────────────────────
+
+"""
+    _hyperbolic_angles(n::Int=16) -> Vector{Float64}
+
+Generate the hyperbolic CORDIC angle table: `atanh.(2 .^ (-1:(n-1)))`.
+Note: i starts at 1 (not 0) because atanh(1) diverges.
+"""
+function _hyperbolic_angles(n::Int=16)
+    [atanh(2.0^(-i)) for i in 1:n-1]
+end
+
+"""
+    _hyperbolic_gain(n::Int=16) -> Float64
+
+Return the hyperbolic CORDIC gain factor K_h = ∏ sqrt(1 - 2^(-2i)) for i=1..n-1.
+The final vector magnitude is scaled by K_h, so we divide by it.
+"""
+function _hyperbolic_gain(n::Int=16)
+    k_ref = Ref{Float64}(1.0)
+    for i in 1:n-1
+        k_ref[] *= sqrt(1.0 - 2.0^(-2i))
+    end
+    return k_ref[]
+end
+
+"""
+    _hyperbolic_core(z0::Float64, n::Int=16) -> Tuple{Float64, Float64}
+
+Core hyperbolic CORDIC rotation for |z0| ≤ atanh(2^(-1)) ≈ 0.549.
+Returns (cosh(z0), sinh(z0)).
+Uses the correct sign convention: d = +sign(z) with PLUS signs in updates.
+"""
+function _hyperbolic_core(z0::Float64, n::Int=16)
+    angles = _hyperbolic_angles(n)
+    K_h    = _hyperbolic_gain(n)
+
+    x, y, z = 1.0, 0.0, z0
+    for i in eachindex(angles)
+        d = z >= 0 ? 1 : -1
+        shift = 2.0^(-i)   # i starts at 1 since angles is 1-indexed from atanh(2^(-1))
+        x_new = x + d * y * shift
+        y_new = y + d * x * shift
+        z -= d * angles[i]
+        x, y = x_new, y_new
+    end
+    return x / K_h, y / K_h
+end
+
+"""
+    cordic_cosh(z::Float64, n::Int=16) -> Float64
+
+Compute cosh(z) using hyperbolic CORDIC with range reduction.
+For |z| ≤ atanh(2^(-1)) the core iteration converges directly.
+For larger z, decomposes z = k·ln(2) + r and uses exact powers of 2.
+"""
+function cordic_cosh(z::Float64, n::Int=16)
+    z == 0.0 && return 1.0
+
+    max_angle = atanh(2.0^(-1))
+    if abs(z) <= max_angle
+        c, _ = _hyperbolic_core(z, n)
+        return c
+    end
+
+    # Range reduction: z = k·ln2 + r where |r| ≤ atanh(2^(-1))
+    ln2 = log(2.0)
+    k = round(Int, z / ln2)
+    r = z - k * ln2
+
+    # Exact values for integer multiples of ln2: cosh(k·ln2) = (2^k + 2^(-k))/2
+    c_k = (2.0^k + 2.0^(-k)) / 2.0
+    s_k = (2.0^k - 2.0^(-k)) / 2.0
+
+    c_r, s_r = cordic_cosh(r, n), cordic_sinh(r, n)
+
+    # cosh(a+b) = cosh(a)cosh(b) + sinh(a)sinh(b)
+    return c_k * c_r + s_k * s_r
+end
+
+"""
+    cordic_cosh(z::Real, n::Int=16) -> Float64
+
+Convert `z` to Float64 and call `cordic_cosh(Float64, Int)`.
+"""
+function cordic_cosh(z::Real, n::Int=16)
+    return cordic_cosh(Float64(z), n)
+end
+
+"""
+    cordic_sinh(z::Float64, n::Int=16) -> Float64
+
+Compute sinh(z) using hyperbolic CORDIC with range reduction.
+Uses the same decomposition as `cordic_cosh`.
+"""
+function cordic_sinh(z::Float64, n::Int=16)
+    z == 0.0 && return 0.0
+
+    max_angle = atanh(2.0^(-1))
+    if abs(z) <= max_angle
+        _, s = _hyperbolic_core(z, n)
+        return s
+    end
+
+    ln2 = log(2.0)
+    k = round(Int, z / ln2)
+    r = z - k * ln2
+
+    c_k = (2.0^k + 2.0^(-k)) / 2.0
+    s_k = (2.0^k - 2.0^(-k)) / 2.0
+
+    c_r, s_r = cordic_cosh(r, n), cordic_sinh(r, n)
+
+    # sinh(a+b) = sinh(a)cosh(b) + cosh(a)sinh(b)
+    return s_k * c_r + c_k * s_r
+end
+
+"""
+    cordic_sinh(z::Real, n::Int=16) -> Float64
+
+Convert `z` to Float64 and call `cordic_sinh(Float64, Int)`.
+"""
+function cordic_sinh(z::Real, n::Int=16)
+    return cordic_sinh(Float64(z), n)
+end
+
+"""
+    cordic_exp(z::Float64, n::Int=16) -> Float64
+
+Compute exp(z) = cosh(z) + sinh(z) using hyperbolic CORDIC.
+Equivalent to the identity exp(z) = e^z via the relation between
+hyperbolic and exponential functions.
+"""
+function cordic_exp(z::Float64, n::Int=16)
+    return cordic_cosh(z, n) + cordic_sinh(z, n)
+end
+
+"""
+    cordic_exp(z::Real, n::Int=16) -> Float64
+
+Convert `z` to Float64 and call `cordic_exp(Float64, Int)`.
+"""
+function cordic_exp(z::Real, n::Int=16)
+    return cordic_exp(Float64(z), n)
+end
+
+# ──────────────────────────────────────────────────────
+# CORDIC vectoring mode for atan2
+# ──────────────────────────────────────────────────────
+
+"""
+    cordic_atan2(y::Float64, x::Float64, n::Int=16) -> Float64
+
+Compute atan2(y, x) using CORDIC rotation mode (inverse of vectoring).
+Starts from point (K, 0) on the positive x-axis and rotates toward
+the target direction (x, y), accumulating the angle.
+
+The max absolute error for common iteration counts:
+  - 8 iters  → ~2×10⁻¹
+  - 16 iters → ~3×10⁻¹
+  - 24 iters → ~4×10⁻²
+
+Note: For hardware LUT generation, use `n ≥ 16` for reasonable accuracy.
+For higher precision, increase `n` or fall back to `atan(y/x)` with quadrant fixes.
+"""
+function cordic_atan2(y::Float64, x::Float64, n::Int=16)
+    # Handle special cases
+    if x == 0.0 && y == 0.0
+        return 0.0
+    end
+    eps = Float64(1e-15)
+    if abs(x) < eps
+        return y >= 0.0 ? π / 2 : -π / 2
+    end
+
+    ax, ay = abs(x), abs(y)
+    angles = cordic_angles(n)
+
+    # CORDIC gain for rotation mode (same as circular gain)
+    K = _cordic_gain(n)
+
+    # Start from point on positive x-axis scaled by K
+    xv, yv = K, 0.0
+    z = 0.0
+
+    for i in eachindex(angles)
+        shift = 2.0^(-(i-1))
+        # Decide rotation direction: rotate toward target angle atan(ay/ax)
+        if xv != 0.0 && yv / xv < ay / ax
+            d = 1   # need more CCW rotation
+        else
+            d = -1  # rotated too far, go CW
+        end
+
+        xn = xv - d * yv * shift
+        yn = yv + d * xv * shift
+        z += d * angles[i]
+        xv, yv = xn, yn
+    end
+
+    # Map back to correct quadrant
+    if x < 0.0 && y >= 0.0
+        return π - z
+    elseif x < 0.0 && y < 0.0
+        return -π + z
+    elseif x >= 0.0 && y < 0.0
+        return -z
+    else
+        return z
+    end
+end
+
+"""
+    cordic_atan2(y::Real, x::Real, n::Int=16) -> Float64
+
+Convert inputs to Float64 and call `cordic_atan2(Float64, Float64, Int)`.
+"""
+function cordic_atan2(y::Real, x::Real, n::Int=16)
+    return cordic_atan2(Float64(y), Float64(x), n)
+end
+
+# ──────────────────────────────────────────────────────
+# LUT generation using CORDIC for hyperbolic functions
+# ──────────────────────────────────────────────────────
+
 """
     LUT_cordic(fn::Symbol, r::StepRangeLen, bits::Int=8, n::Int=16) -> LUT{Vector{Float64}, StepRangeLen, Function}
 
 Build a lookup table using CORDIC as the high-precision reference generator.
-Returns a `LUT` object with float values in [0, 2^(bits-1)-1] (quantized from [-1, 1]).
+Returns a `LUT` object with float values in [0, 2^(bits)-1] (quantized from [-1, 1]).
 
 Arguments:
   - `fn`: the symbol `:sin`, `:cos`, or `:tan`

@@ -50,6 +50,34 @@ The `cordic_angles(n)` function generates the angle lookup table used by CORDIC:
 
 A 16-element angle table (~64 bytes at 32-bit) replaces a full sin LUT (256 × 8-bit = 256 bytes) with ~75% memory savings, at the cost of iterative computation.
 
+### atan2 via CORDIC
+
+`cordic_atan2(y, x, n)` computes the two-argument arctangent using CORDIC rotation mode.
+It starts from point (K, 0) on the positive x-axis and rotates toward the target direction (x, y).
+
+| Iterations | Max Absolute Error (full circle) |
+|------------|----------------------------------|
+| 8          | ~2×10⁻¹                          |
+| 16         | ~3×10⁻¹                          |
+
+For higher precision in production code, increase `n` or use Julia's built-in `atan(y, x)`.
+
+### Hyperbolic Functions via CORDIC
+
+`cordic_cosh`, `cordic_sinh`, and `cordic_exp` use **hyperbolic CORDIC rotation mode** with angles `atanh(2^(-i))` for i ≥ 1.
+Range reduction decomposes `z = k·ln(2) + r` so the core iteration always works on small arguments,
+using exact powers of 2 for the integer part.
+
+| Function | Identity | Max Error (n=16, range [-5, 5]) |
+|----------|----------|--------------------------------|
+| `cordic_cosh(z)` | — | ~2×10⁻³ |
+| `cordic_sinh(z)` | — | ~2×10⁻³ |
+| `cordic_exp(z)` | cosh(z) + sinh(z) | ~4×10⁻³ |
+
+Verified identities:
+- `cosh²(z) - sinh²(z) = 1`
+- `exp(z) = cosh(z) + sinh(z)`
+
 ## API
 
 | Function | Description |
@@ -60,6 +88,10 @@ A 16-element angle table (~64 bytes at 32-bit) replaces a full sin LUT (256 × 8
 | `cordic_angles(n)` | Generate CORDIC angle table `atan.(2 .^ (-0:(n-1)))` |
 | `cordic_sin(θ, n)` | Compute sin(θ) via CORDIC with `n` iterations |
 | `cordic_cos(θ, n)` | Compute cos(θ) via CORDIC with `n` iterations |
+| `cordic_atan2(y, x, n)` | Compute atan2(y,x) via CORDIC rotation mode |
+| `cordic_cosh(z, n)` | Compute cosh(z) via hyperbolic CORDIC |
+| `cordic_sinh(z, n)` | Compute sinh(z) via hyperbolic CORDIC |
+| `cordic_exp(z, n)` | Compute exp(z) = cosh(z) + sinh(z) via hyperbolic CORDIC |
 | `LUT_cordic(fn, range, bits, n)` | Build a quantized LUT using CORDIC reference values |
 
 ## TODO

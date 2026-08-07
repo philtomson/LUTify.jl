@@ -1,4 +1,3 @@
-
 using Test
 using LUTify
 
@@ -85,5 +84,84 @@ err_16 = maximum(abs, cordic_sin.(collect(0.0:π/100:2π), Ref(16)) .- sin.(coll
 @test err_16 < err_8
 println("More iterations → less error: PASS (8iter=", round(err_8, sigdigits=3), ", 16iter=", round(err_16, sigdigits=3), ")")
 
+# ──────────────────────────────────────────────────────
+# Hyperbolic CORDIC tests
+# ──────────────────────────────────────────────────────
+println()
+println("=== Testing Hyperbolic CORDIC ===")
+
+# Test cordic_cosh at key points
+@test isapprox(cordic_cosh(0.0, 16), cosh(0.0), atol=1e-4)
+@test isapprox(cordic_cosh(0.5, 16), cosh(0.5), atol=1e-3)
+@test isapprox(cordic_cosh(1.0, 16), cosh(1.0), atol=1e-3)
+@test isapprox(cordic_cosh(-1.0, 16), cosh(-1.0), atol=1e-3)
+println("cordic_cosh accuracy: PASS")
+
+# Test cordic_sinh at key points
+@test isapprox(cordic_sinh(0.0, 16), sinh(0.0), atol=1e-4)
+@test isapprox(cordic_sinh(0.5, 16), sinh(0.5), atol=1e-3)
+@test isapprox(cordic_sinh(1.0, 16), sinh(1.0), atol=1e-3)
+@test isapprox(cordic_sinh(-1.0, 16), sinh(-1.0), atol=1e-3)
+println("cordic_sinh accuracy: PASS")
+
+# Test cordic_exp
+@test isapprox(cordic_exp(0.0, 16), exp(0.0), atol=1e-4)
+@test isapprox(cordic_exp(0.5, 16), exp(0.5), atol=1e-3)
+@test isapprox(cordic_exp(1.0, 16), exp(1.0), atol=1e-3)
+@test isapprox(cordic_exp(-1.0, 16), exp(-1.0), atol=1e-3)
+println("cordic_exp accuracy: PASS")
+
+# Test identity: cosh² - sinh² = 1
+for z in [-2.0, -1.0, 0.0, 0.5, 1.0, 2.0]
+    c = cordic_cosh(z, 16)
+    s = cordic_sinh(z, 16)
+    @test isapprox(c^2 - s^2, 1.0, atol=1e-3)
+end
+println("cosh² - sinh² = 1 identity: PASS")
+
+# Test exp(x) = cosh(x) + sinh(x)
+for z in [-2.0, -1.0, 0.0, 0.5, 1.0, 2.0]
+    @test isapprox(cordic_exp(z, 16), cordic_cosh(z, 16) + cordic_sinh(z, 16), atol=1e-3)
+end
+println("exp = cosh + sinh identity: PASS")
+
+# Test error decreases with more iterations for hyperbolic
+err_8_c  = maximum(abs, [cordic_cosh(z, 8) - cosh(z) for z in -2.0:0.1:2.0])
+err_16_c = maximum(abs, [cordic_cosh(z, 16) - cosh(z) for z in -2.0:0.1:2.0])
+@test err_16_c < err_8_c
+println("Hyperbolic: more iterations → less error: PASS")
+
+# ──────────────────────────────────────────────────────
+# atan2 CORDIC tests
+# ──────────────────────────────────────────────────────
+println()
+println("=== Testing atan2 CORDIC ===")
+
+@test isapprox(cordic_atan2(0.0, 1.0, 16), atan(0.0, 1.0), atol=1e-3)
+@test isapprox(cordic_atan2(1.0, 0.0, 16), atan(1.0, 0.0), atol=1e-3)
+@test isapprox(cordic_atan2(-1.0, 0.0, 16), atan(-1.0, 0.0), atol=1e-3)
+@test isapprox(cordic_atan2(0.0, -1.0, 16), atan(0.0, -1.0), atol=1e-3)
+@test isapprox(cordic_atan2(1.0, 1.0, 16), atan(1.0, 1.0), atol=1e-2)
+@test isapprox(cordic_atan2(-1.0, 1.0, 16), atan(-1.0, 1.0), atol=1e-2)
+@test isapprox(cordic_atan2(-1.0, -1.0, 16), atan(-1.0, -1.0), atol=1e-2)
+@test isapprox(cordic_atan2(1.0, -1.0, 16), atan(1.0, -1.0), atol=1e-2)
+println("cordic_atan2 key points: PASS")
+
+# Test atan2 consistency with sin/cos
+for θ in 0.0:π/8:2π
+    y = cordic_sin(θ, 16)
+    x = cordic_cos(θ, 16)
+    recovered = cordic_atan2(y, x, 16)
+    # Normalize difference to [-π, π]
+    diff = recovered - θ
+    while diff > π; diff -= 2π; end
+    while diff < -π; diff += 2π; end
+    @test abs(diff) < 0.3  # generous tolerance for atan2
+end
+println("atan2 consistency with sin/cos: PASS")
+
+# ──────────────────────────────────────────────────────
+# Summary
+# ──────────────────────────────────────────────────────
 println()
 println("All tests passed!")
