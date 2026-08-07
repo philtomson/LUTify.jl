@@ -7,5 +7,10 @@ version = "0.1.0"
 [extras]
 Test = "8dfed614-e15c-473a-9006-1e622dbfab3e"
 
+[test]
+deps = [
+    Test,
+]
+
 [compat]
 julia = "1.6"
