@@ -5,3 +5,6 @@ julia_cache/
 
 # Dependencies
 Manifest.toml
+
+# Build artifacts
+build/
