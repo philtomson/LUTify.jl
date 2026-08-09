@@ -93,6 +93,14 @@ Verified identities:
 | `cordic_sinh(z, n)` | Compute sinh(z) via hyperbolic CORDIC |
 | `cordic_exp(z, n)` | Compute exp(z) = cosh(z) + sinh(z) via hyperbolic CORDIC |
 | `LUT_cordic(fn, range, bits, n)` | Build a quantized LUT using CORDIC reference values |
+| `export_verilog(lut, bits, fn_name)` | Generate self-contained Verilog module string |
+
+| `export_vhdl(lut, bits, fn_name)` | Generate VHDL entity/architecture string |
+
+| `export_memfile(lut, path; format)` | Write memory init file (.hex, .mif, .coe, .txt) |
+
+| `export_testbench(lut, bits, fn_name; tolerance, extra_cycles)` | Generate Verilog testbench with embedded reference values |
+
 
 
 ### Export to HDL (Verilog/VHDL)
@@ -126,9 +134,52 @@ The generated Verilog module has:
 
 Standard float LUTs are automatically quantized from their value range to [0, 2^bits−1].
 
+### Self-Contained Verilog Testbench
+
+`export_testbench` generates a complete Verilog testbench that drives the DUT with all N address entries and compares against pre-computed reference values. The testbench embeds expected quantized outputs directly, so no external reference simulation is needed:
+
+```julia
+using LUTify
+
+sinlut = LUT_cordic(:sin, 0.0:(π/50):2π, 8, 16)
+
+# Generate a self-contained testbench
+tb = export_testbench(sinlut, 8)
+open("tb_sin.v", "w") do f; write(f, tb); end
+```
+
+The generated testbench includes:
+- Parameterized DUT interface (`ADDR_W`, `BITS`, `N`)
+- Embedded reference values as binary constants (`expected[00000000] = 8'b...`)
+- Clock generation and sequential address sweep
+- Per-entry comparison with ULP error tracking
+- `$display` summary report with PASS/FAIL result and `$finish`
+
+**Parameters:**
+| Name | Default | Description |
+|---|---|---|
+| `lut` | — | LUT object to testbench |
+| `bits` | 8 | Quantization bit width for the testbench DUT |
+| `fn_name` | "lut" | Module name suffix |
+| `tolerance` | 1.0 | Allowed mismatch in ULP (quantization steps) |
+| `extra_cycles` | 4 | Extra clock cycles holding last address (stability check) |
+
+The testbench outputs a summary like:
+```
+========================================
+Testbench: tb_sin_bits8
+DUT:       lut_sin_bits8 (N=101, BITS=8)
+Cycles:    205
+Errors:    0 / 101
+Max err:   0 ULP
+RESULT: PASS -- all N entries match reference
+========================================
+```
+
 ## TODO
 
-- [x] CORDIC support (sin, cos, tan)
-- [ ] Export lookup tables to HDL (Verilog/VHDL)
-- [ ] Full test coverage
-- [ ] Support for custom functions via CORDIC-like algorithms (exp, atan2, etc.)
+- [x] CORDIC support (sin, cos, tan, atan2)
+- [x] Hyperbolic CORDIC (sinh, cosh, exp)
+- [x] Export lookup tables to HDL (Verilog/VHDL)
+- [x] Self-contained Verilog testbench generation
+- [x] Full test coverage (46 tests)
