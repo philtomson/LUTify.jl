@@ -306,4 +306,53 @@ end
 # Summary
 # ──────────────────────────────────────────────────────
 println()
+
+# ============================================
+# Multi-var LUT HDL export tests
+# ============================================
+println("\n=== Testing Multi-var HDL Export ===")
+
+mv_lut = LUT(:(x+y), [(:x, 0.0:0.5:1.0), (:y, 0.0:0.5:1.0)])
+
+# Test Verilog generation
+vlog_mv = export_verilog(mv_lut, 8, "add")
+@test length(vlog_mv) > 0
+@test occursin("module lut_add_bits8", vlog_mv)
+@test occursin("input  wire [1:0]     x", vlog_mv)
+@test occursin("input  wire [1:0]     y", vlog_mv)
+@test occursin("wire [3:0] addr = x * 3 + y * 1", vlog_mv)
+@test occursin("lut[0000]", vlog_mv)
+println("Multi-var Verilog export: PASS")
+
+# Test VHDL generation
+vhd_mv = export_vhdl(mv_lut, 8, "add")
+@test length(vhd_mv) > 0
+@test occursin("entity lut_add_8bit", vhd_mv)
+@test occursin("x : in  std_logic_vector(1 downto 0)", vhd_mv)
+@test occursin("y : in  std_logic_vector(1 downto 0)", vhd_mv)
+@test occursin("signal addr : std_logic_vector(3 downto 0)", vhd_mv)
+println("Multi-var VHDL export: PASS")
+
+# Test memfile generation
+export_memfile(mv_lut, "/tmp/mv_test.hex"; bits=8, format=:hex)
+@test isfile("/tmp/mv_test.hex")
+open("/tmp/mv_test.hex") do f
+    hex_content = read(f, String)
+    @test startswith(hex_content, "% 8")
+    # Multi-var LUT entries are single bytes in compact format
+    @test contains(hex_content, "01")
+end
+println("Multi-var memfile export: PASS")
+
+# Test single-var still works after multi-var changes
+sinlut = LUT(sin, range(0.0, stop=2π, length=64))
+vlog_sv = export_verilog(sinlut, 8, "sin")
+@test occursin("input  wire [5:0] addr", vlog_sv)
+@test !occursin("input  wire [1:0]     x", vlog_sv)
+println("Single-var Verilog unchanged: PASS")
+
+vhd_sv = export_vhdl(sinlut, 8, "sin")
+@test occursin("addr : in  std_logic_vector(5 downto 0)", vhd_sv)
+println("Single-var VHDL unchanged: PASS")
+
 println("All tests passed!")
