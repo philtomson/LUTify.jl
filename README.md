@@ -2,6 +2,79 @@
 
 Takes a function with one input and turns it into a lookup table. This can be useful for modelling hardware, for example. Take the sin function — it's difficult to implement in hardware without resorting to something like CORDIC ...or lookup tables.
 
+
+## Getting Started
+
+### Installation
+
+```julia
+using Pkg
+Pkg.add("LUTify")
+```
+
+### Quick Start
+
+```julia
+using LUTify
+
+# 1. Create a lookup table from sin over [0, 2π] with 64 points
+sinlut = LUT(sin, range(0.0, stop=2π, length=64))
+
+# 2. Evaluate interpolated values
+v = sinlut(π/4)  # ≈ sin(π/4) from the table
+
+# 3. Export as Verilog module (8-bit data width)
+verilog_code = export_verilog(sinlut, bits=8, fn_name="sin")
+open("sin_lut.v", "w") do f; write(f, verilog_code); end
+
+# 4. Generate a self-contained testbench and simulate
+testbench = export_testbench(sinlut, bits=8)
+open("tb_sin.v", "w") do f; write(f, testbench); end
+system("iverilog -o tb_sin tb_sin.v sin_lut.v && vvp tb_sin")
+
+# 5. Or export memory files for FPGA toolchains
+export_memfile(sinlut, "sin_lut.hex"; format=:hex)   # Intel/Altera HEX
+export_memfile(sinlut, "sin_lut.mif"; format=:mif)   # Xilinx MIF
+export_memfile(sinlut, "sin_lut.coe"; format=:coe)   # Xilinx COE
+```
+
+### Multi-var Lookup Tables
+
+LUTify supports lookup tables with multiple input variables. The addressing follows a
+row-major stride scheme compatible with `get_idx`:
+
+```julia
+using LUTify
+
+# 2-variable table: z = x + y, x ∈ [0,1], y ∈ [0,1] (3 levels each)
+mv_lut = LUT(:(x+y), [(:x, 0.0:0.5:1.0), (:y, 0.0:0.5:1.0)])
+
+# Export Verilog with per-variable address buses
+vlog = export_verilog(mv_lut, bits=8, fn_name="add")
+# Generates: module lut_add_bits8(input [1:0] x, input [1:0] y, clk, output [7:0] data)
+
+# Export VHDL
+vhd = export_vhdl(mv_lut, bits=8, fn_name="add")
+
+# Generate testbench with per-variable drive task
+tb = export_testbench(mv_lut, bits=8)
+```
+
+### CORDIC-based LUTs
+
+For higher precision or when no closed-form function is available, use CORDIC to generate
+reference values:
+
+```julia
+using LUTify
+
+# 16-bit CORDIC with 16 iterations for high-precision sin table
+sinlut = LUT_cordic(sin, range(0.0, stop=2π, length=256), bits=12, n=16)
+
+# Also available: cos, tan, sinh, cosh, exp, atan2
+cosh_lut = LUT_cordic(cosh, range(0.0, stop=2.0, length=128), bits=10, n=12)
+atan_lut = LUT_cordic(atan2, [(:y, -π:π/64:π), (:x, -π:π/64:π)], bits=10, n=12)
+```
 ## Usage
 
 ### Standard LUT (direct function evaluation)
