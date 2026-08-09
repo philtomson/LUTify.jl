@@ -238,6 +238,67 @@ println("atan2 consistency with sin/cos: PASS")
         sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
         @test_throws ErrorException export_verilog(sinlut, 0, "bad")
         @test_throws ErrorException export_verilog(sinlut, 33, "bad")
+
+    @testset "Testbench generation" begin
+        # Basic testbench for sin LUT
+        sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+        tb = export_testbench(sinlut; extra_cycles=0)
+
+        @test occursin("module tb_lut_bits8;", tb)
+        @test occursin("parameter N      = ", tb)
+        @test occursin("parameter BITS   = 8;", tb)
+        @test occursin("ADDR_W-1:0", tb)  # parameterized address width
+        @test occursin("BITS-1:0]", tb)  # parameterized data width
+        @test occursin("dut (", tb)
+        @test occursin("\$finish;", tb)
+
+        # Check that expected values are embedded
+        @test occursin("expected[00000000] = 8'b", tb)
+        @test occursin("expected[00000199] = 8'b", tb)
+    end
+
+    @testset "Testbench with different bit widths" begin
+        sinlut = LUT_cordic(:sin, 0.0:(π/50):2π, 8, 16)
+
+        # 4-bit testbench
+        tb_4bit = export_testbench(sinlut, 4; extra_cycles=0)
+        @test occursin("parameter BITS   = 4;", tb_4bit)
+        @test occursin("ADDR_W", tb_4bit)
+
+        # 16-bit testbench
+        tb_16bit = export_testbench(sinlut, 16; extra_cycles=0)
+        @test occursin("parameter BITS   = 16;", tb_16bit)
+        @test occursin("ADDR_W", tb_16bit)
+    end
+
+    @testset "Testbench with cos and tan" begin
+        # Cos testbench
+        r = range(0.0, stop=2π, length=64)
+        coslut = LUT_cordic(:cos, r, 8)
+        tb_cos = export_testbench(coslut; extra_cycles=0)
+        @test occursin("module tb_lut_bits8;", tb_cos)
+
+        # Tan testbench (use smaller range to avoid infinities)
+        tanlut = LUT_cordic(:tan, -π/4:(π/64):π/4, 8)
+        tb_tan = export_testbench(tanlut; extra_cycles=0)
+        @test occursin("module tb_lut_bits8;", tb_tan)
+    end
+
+    @testset "Testbench with standard LUT" begin
+        stdlut = LUT(sin, 0.0:(π/50):2π)
+        tb = export_testbench(stdlut; extra_cycles=0)
+        @test occursin("module tb_lut_bits8;", tb)
+        @test occursin("\$finish;", tb)
+    end
+
+    @testset "Testbench with extra cycles" begin
+        sinlut = LUT_cordic(:sin, 0.0:(π/100):2π, 8, 16)
+        tb = export_testbench(sinlut; extra_cycles=4)
+
+        # Should contain stability check code
+        @test occursin("extra cycles", tb)
+        @test occursin("stable-check", tb)
+    end
     end
 end
 
