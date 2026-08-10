@@ -1,0 +1,8 @@
+# Generated output from examples
+*.v
+*.vhd
+*.hex
+*.mif
+*.coe
+*.txt
+output/
